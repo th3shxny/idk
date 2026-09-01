@@ -1,13 +1,13 @@
 --// CAM AIM TEST MENU
 --// Roblox Studio LocalScript
---// Place in: StarterPlayer > StarterPlayerScripts
---// Studio testing only - no exploit/executor functionality
+--// Put in StarterPlayer > StarterPlayerScripts
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 
 local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
 --==================================================
 -- SETTINGS
@@ -24,491 +24,419 @@ local ESPEnabled = true
 local FOV = 90
 local Smoothness = 0.50
 local WalkSpeed = 20
+local JumpPower = 50
 
 local ToggleKey = Enum.KeyCode.Q
 local MenuKey = Enum.KeyCode.Z
 
 local CurrentTarget = nil
-local ESPObjects = {}
+local SelectedPlayer = nil
+local DropdownOpen = false
 
+local ESPObjects = {}
 local TeleportSlots = {}
+
 for i = 1, 10 do
 	TeleportSlots[i] = nil
 end
+
+--==================================================
+-- TELEPORT PRESETS
+--==================================================
+
+local TeleportPresets = {
+	{Name = "Bank", Position = Vector3.new(-482.7, 23.1, -285.1)},
+	{Name = "Up Hill Guns", Position = Vector3.new(491, 48.1, -633)},
+	{Name = "High Mid Armour", Position = Vector3.new(-935, -28, 567)},
+	{Name = "Downhill Gunz", Position = Vector3.new(-57, 8.3, -735)},
+	{Name = "DB", Position = Vector3.new(36, 25, -835)},
+	{Name = "Safe Food", Position = Vector3.new(57, 66, 394)}
+}
 
 --==================================================
 -- CHARACTER HELPERS
 --==================================================
 
 local function getCharacter(player)
-	if not player then
-		return nil
-	end
-
-	local character = player.Character
-	if not character then
-		return nil
-	end
-
-	local humanoid = character:FindFirstChildOfClass("Humanoid")
-	local head = character:FindFirstChild("Head")
-	local root = character:FindFirstChild("HumanoidRootPart")
-
-	if not humanoid or not head or not root then
-		return nil
-	end
-
-	if humanoid.Health <= 0 then
-		return nil
-	end
-
-	return character, humanoid, head, root
+	return player and player.Character
 end
 
-local function getLocalCharacter()
-	return getCharacter(LocalPlayer)
+local function getHumanoid(player)
+	local character = getCharacter(player)
+	return character and character:FindFirstChildOfClass("Humanoid")
 end
 
---==================================================
--- GUI HELPERS
---==================================================
-
-local function create(className, properties, parent)
-	local object = Instance.new(className)
-
-	for property, value in pairs(properties or {}) do
-		object[property] = value
-	end
-
-	if parent then
-		object.Parent = parent
-	end
-
-	return object
+local function getRoot(player)
+	local character = getCharacter(player)
+	return character and character:FindFirstChild("HumanoidRootPart")
 end
 
-local function corner(parent, radius)
-	return create("UICorner", {
-		CornerRadius = UDim.new(0, radius or 8)
-	}, parent)
+local function getHead(player)
+	local character = getCharacter(player)
+	return character and character:FindFirstChild("Head")
 end
 
-local function stroke(parent, color, thickness)
-	return create("UIStroke", {
-		Color = color or Color3.fromRGB(55, 55, 55),
-		Thickness = thickness or 1
-	}, parent)
-end
+local function isAlive(player)
+	local humanoid = getHumanoid(player)
+	local root = getRoot(player)
+	local head = getHead(player)
 
-local function makeButton(parent, text, position, size)
-	local button = create("TextButton", {
-		BackgroundColor3 = Color3.fromRGB(28, 28, 28),
-		BorderSizePixel = 0,
-		Position = position,
-		Size = size,
-		Text = text,
-		TextColor3 = Color3.fromRGB(235, 235, 235),
-		TextSize = 14,
-		Font = Enum.Font.GothamMedium,
-		AutoButtonColor = true
-	}, parent)
-
-	corner(button, 7)
-	stroke(button)
-
-	return button
-end
-
-local function makeLabel(parent, text, position, size, textSize)
-	return create("TextLabel", {
-		BackgroundTransparency = 1,
-		Position = position,
-		Size = size,
-		Text = text,
-		TextColor3 = Color3.fromRGB(225, 225, 225),
-		TextSize = textSize or 14,
-		Font = Enum.Font.GothamMedium,
-		TextXAlignment = Enum.TextXAlignment.Left
-	}, parent)
+	return humanoid
+		and humanoid.Health > 0
+		and root
+		and head
 end
 
 --==================================================
--- SCREEN GUI
+-- REMOVE OLD GUI
 --==================================================
 
-local oldGui = LocalPlayer:WaitForChild("PlayerGui"):FindFirstChild("CamAimTestMenu")
+local oldGui = PlayerGui:FindFirstChild("CamAimTestMenu")
+
 if oldGui then
 	oldGui:Destroy()
 end
 
-local ScreenGui = create("ScreenGui", {
-	Name = "CamAimTestMenu",
-	ResetOnSpawn = false,
-	ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-}, LocalPlayer:WaitForChild("PlayerGui"))
-
 --==================================================
--- MAIN FRAME
+-- GUI CREATION
 --==================================================
 
-local MainFrame = create("Frame", {
-	Name = "MainFrame",
-	AnchorPoint = Vector2.new(0.5, 0.5),
-	Position = UDim2.fromScale(0.5, 0.5),
-	Size = UDim2.fromOffset(460, 570),
-	BackgroundColor3 = Color3.fromRGB(13, 13, 13),
-	BorderSizePixel = 0
-}, ScreenGui)
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "CamAimTestMenu"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.IgnoreGuiInset = true
+ScreenGui.Parent = PlayerGui
 
-corner(MainFrame, 12)
-stroke(MainFrame, Color3.fromRGB(55, 55, 55), 1)
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Size = UDim2.new(0, 460, 0, 650)
+MainFrame.Position = UDim2.new(0.5, -230, 0.5, -325)
+MainFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
+MainFrame.BorderSizePixel = 0
+MainFrame.Parent = ScreenGui
+
+local MainCorner = Instance.new("UICorner")
+MainCorner.CornerRadius = UDim.new(0, 10)
+MainCorner.Parent = MainFrame
+
+local MainStroke = Instance.new("UIStroke")
+MainStroke.Color = Color3.fromRGB(55, 55, 55)
+MainStroke.Thickness = 1
+MainStroke.Parent = MainFrame
 
 --==================================================
 -- TITLE BAR
 --==================================================
 
-local TitleBar = create("Frame", {
-	Name = "TitleBar",
-	Position = UDim2.fromOffset(0, 0),
-	Size = UDim2.new(1, 0, 0, 48),
-	BackgroundColor3 = Color3.fromRGB(18, 18, 18),
-	BorderSizePixel = 0,
-	Active = true
-}, MainFrame)
+local TitleBar = Instance.new("Frame")
+TitleBar.Size = UDim2.new(1, 0, 0, 45)
+TitleBar.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
+TitleBar.BorderSizePixel = 0
+TitleBar.Parent = MainFrame
 
-corner(TitleBar, 12)
+local TitleCorner = Instance.new("UICorner")
+TitleCorner.CornerRadius = UDim.new(0, 10)
+TitleCorner.Parent = TitleBar
 
-local Title = makeLabel(
-	TitleBar,
-	"Cam Aim Tester",
-	UDim2.fromOffset(16, 0),
-	UDim2.new(1, -100, 1, 0),
-	17
-)
-
+local Title = Instance.new("TextLabel")
+Title.Size = UDim2.new(1, -120, 1, 0)
+Title.Position = UDim2.new(0, 15, 0, 0)
+Title.BackgroundTransparency = 1
+Title.Text = "Cam Aim Tester"
+Title.TextColor3 = Color3.fromRGB(235, 235, 235)
+Title.TextSize = 19
 Title.Font = Enum.Font.GothamBold
+Title.TextXAlignment = Enum.TextXAlignment.Left
+Title.Parent = TitleBar
 
-local HideButton = makeButton(
-	TitleBar,
-	"—",
-	UDim2.new(1, -82, 0, 8),
-	UDim2.fromOffset(32, 32)
-)
+local HideButton = Instance.new("TextButton")
+HideButton.Size = UDim2.new(0, 40, 0, 32)
+HideButton.Position = UDim2.new(1, -90, 0, 6)
+HideButton.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+HideButton.Text = "—"
+HideButton.TextColor3 = Color3.fromRGB(220, 220, 220)
+HideButton.TextSize = 20
+HideButton.Font = Enum.Font.GothamBold
+HideButton.BorderSizePixel = 0
+HideButton.Parent = TitleBar
 
-local SettingsButton = makeButton(
-	TitleBar,
-	"⚙",
-	UDim2.new(1, -44, 0, 8),
-	UDim2.fromOffset(32, 32)
-)
+local HideCorner = Instance.new("UICorner")
+HideCorner.CornerRadius = UDim.new(0, 7)
+HideCorner.Parent = HideButton
 
---==================================================
--- DRAGGING
---==================================================
+local SettingsButton = Instance.new("TextButton")
+SettingsButton.Size = UDim2.new(0, 40, 0, 32)
+SettingsButton.Position = UDim2.new(1, -45, 0, 6)
+SettingsButton.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+SettingsButton.Text = "⚙"
+SettingsButton.TextColor3 = Color3.fromRGB(220, 220, 220)
+SettingsButton.TextSize = 18
+SettingsButton.Font = Enum.Font.GothamBold
+SettingsButton.BorderSizePixel = 0
+SettingsButton.Parent = TitleBar
 
-local dragging = false
-local dragStart
-local startPosition
-
-TitleBar.InputBegan:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 then
-		dragging = true
-		dragStart = input.Position
-		startPosition = MainFrame.Position
-	end
-end)
-
-TitleBar.InputEnded:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 then
-		dragging = false
-	end
-end)
-
-UserInputService.InputChanged:Connect(function(input)
-	if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-		local delta = input.Position - dragStart
-
-		MainFrame.Position = UDim2.new(
-			startPosition.X.Scale,
-			startPosition.X.Offset + delta.X,
-			startPosition.Y.Scale,
-			startPosition.Y.Offset + delta.Y
-		)
-	end
-end)
+local SettingsCorner = Instance.new("UICorner")
+SettingsCorner.CornerRadius = UDim.new(0, 7)
+SettingsCorner.Parent = SettingsButton
 
 --==================================================
 -- MAIN CONTENT
 --==================================================
 
-local MainContent = create("Frame", {
-	Name = "MainContent",
-	Position = UDim2.fromOffset(0, 48),
-	Size = UDim2.new(1, 0, 1, -48),
-	BackgroundTransparency = 1
-}, MainFrame)
+local Content = Instance.new("Frame")
+Content.Size = UDim2.new(1, -30, 1, -60)
+Content.Position = UDim2.new(0, 15, 0, 52)
+Content.BackgroundTransparency = 1
+Content.Parent = MainFrame
 
---==================================================
--- AIM LOCK
---==================================================
+local function createButton(parent, text, position, size)
+	local button = Instance.new("TextButton")
+	button.Size = size
+	button.Position = position
+	button.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+	button.BorderSizePixel = 0
+	button.Text = text
+	button.TextColor3 = Color3.fromRGB(235, 235, 235)
+	button.TextSize = 14
+	button.Font = Enum.Font.GothamMedium
+	button.Parent = parent
 
-local AimButton = makeButton(
-	MainContent,
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 7)
+	corner.Parent = button
+
+	return button
+end
+
+local AimButton = createButton(
+	Content,
 	"AIM LOCK: OFF",
-	UDim2.fromOffset(15, 15),
-	UDim2.fromOffset(210, 42)
+	UDim2.new(0, 0, 0, 0),
+	UDim2.new(1, 0, 0, 42)
 )
 
-local LockedLabel = makeLabel(
-	MainContent,
-	"Locked Onto: None",
-	UDim2.fromOffset(240, 15),
-	UDim2.fromOffset(205, 42),
-	13
-)
+local LockedLabel = Instance.new("TextLabel")
+LockedLabel.Size = UDim2.new(1, 0, 0, 28)
+LockedLabel.Position = UDim2.new(0, 0, 0, 45)
+LockedLabel.BackgroundTransparency = 1
+LockedLabel.Text = "Locked Onto: None"
+LockedLabel.TextColor3 = Color3.fromRGB(170, 170, 170)
+LockedLabel.TextSize = 13
+LockedLabel.Font = Enum.Font.Gotham
+LockedLabel.TextXAlignment = Enum.TextXAlignment.Left
+LockedLabel.Parent = Content
 
-LockedLabel.TextWrapped = true
-
-local function updateAimButton()
-	if AimLockEnabled then
-		AimButton.Text = "AIM LOCK: ON"
-		AimButton.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-	else
-		AimButton.Text = "AIM LOCK: OFF"
-		AimButton.BackgroundColor3 = Color3.fromRGB(28, 28, 28)
-	end
-end
-
---==================================================
--- ESP
---==================================================
-
-local ESPButton = makeButton(
-	MainContent,
+local ESPButton = createButton(
+	Content,
 	"ESP: ON",
-	UDim2.fromOffset(15, 70),
-	UDim2.fromOffset(430, 38)
+	UDim2.new(0, 0, 0, 78),
+	UDim2.new(1, 0, 0, 36)
 )
 
---==================================================
--- SLIDER CREATOR
---==================================================
-
-local function createSlider(parent, title, y, minimum, maximum, defaultValue, callback)
-
-	local label = makeLabel(
-		parent,
-		title,
-		UDim2.fromOffset(15, y),
-		UDim2.fromOffset(180, 25),
-		13
-	)
-
-	local valueLabel = makeLabel(
-		parent,
-		tostring(defaultValue),
-		UDim2.new(1, -100, 0, y),
-		UDim2.fromOffset(85, 25),
-		13
-	)
-
-	valueLabel.TextXAlignment = Enum.TextXAlignment.Right
-
-	local bar = create("Frame", {
-		Position = UDim2.fromOffset(15, y + 28),
-		Size = UDim2.fromOffset(430, 7),
-		BackgroundColor3 = Color3.fromRGB(35, 35, 35),
-		BorderSizePixel = 0
-	}, parent)
-
-	corner(bar, 5)
-
-	local fill = create("Frame", {
-		Size = UDim2.new(
-			(defaultValue - minimum) / (maximum - minimum),
-			0,
-			1,
-			0
-		),
-		BackgroundColor3 = Color3.fromRGB(130, 130, 130),
-		BorderSizePixel = 0
-	}, bar)
-
-	corner(fill, 5)
-
-	local knob = create("Frame", {
-		AnchorPoint = Vector2.new(0.5, 0.5),
-		Position = UDim2.new(
-			(defaultValue - minimum) / (maximum - minimum),
-			0,
-			0.5,
-			0
-		),
-		Size = UDim2.fromOffset(13, 13),
-		BackgroundColor3 = Color3.fromRGB(235, 235, 235),
-		BorderSizePixel = 0
-	}, bar)
-
-	corner(knob, 10)
-
-	local sliderButton = create("TextButton", {
-		BackgroundTransparency = 1,
-		Position = UDim2.fromOffset(0, -8),
-		Size = UDim2.new(1, 0, 1, 23),
-		Text = ""
-	}, bar)
-
-	local draggingSlider = false
-
-	local function setValueFromX(x)
-		local relative = math.clamp(
-			(x - bar.AbsolutePosition.X) / bar.AbsoluteSize.X,
-			0,
-			1
-		)
-
-		local value = minimum + ((maximum - minimum) * relative)
-
-		if maximum - minimum <= 10 then
-			value = math.round(value * 100) / 100
-		else
-			value = math.round(value)
-		end
-
-		local percentage = (value - minimum) / (maximum - minimum)
-
-		fill.Size = UDim2.new(percentage, 0, 1, 0)
-		knob.Position = UDim2.new(percentage, 0, 0.5, 0)
-		valueLabel.Text = tostring(value)
-
-		callback(value)
-	end
-
-	sliderButton.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 then
-			draggingSlider = true
-			setValueFromX(input.Position.X)
-		end
-	end)
-
-	sliderButton.InputEnded:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 then
-			draggingSlider = false
-		end
-	end)
-
-	UserInputService.InputChanged:Connect(function(input)
-		if draggingSlider and input.UserInputType == Enum.UserInputType.MouseMovement then
-			setValueFromX(input.Position.X)
-		end
-	end)
-
-	return {
-		SetValue = function(value)
-			value = math.clamp(value, minimum, maximum)
-
-			local percentage = (value - minimum) / (maximum - minimum)
-
-			fill.Size = UDim2.new(percentage, 0, 1, 0)
-			knob.Position = UDim2.new(percentage, 0, 0.5, 0)
-			valueLabel.Text = tostring(value)
-
-			callback(value)
-		end
-	}
-end
 
 --==================================================
 -- SLIDERS
 --==================================================
 
+local function createSlider(parent, titleText, y, minValue, maxValue, initialValue, callback, decimals)
+
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.new(1, 0, 0, 20)
+	label.Position = UDim2.new(0, 0, 0, y)
+	label.BackgroundTransparency = 1
+	label.TextColor3 = Color3.fromRGB(220, 220, 220)
+	label.TextSize = 13
+	label.Font = Enum.Font.GothamMedium
+	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.Parent = parent
+
+	local bar = Instance.new("Frame")
+	bar.Size = UDim2.new(1, 0, 0, 8)
+	bar.Position = UDim2.new(0, 0, 0, y + 27)
+	bar.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+	bar.BorderSizePixel = 0
+	bar.Parent = parent
+
+	local barCorner = Instance.new("UICorner")
+	barCorner.CornerRadius = UDim.new(1, 0)
+	barCorner.Parent = bar
+
+	local fill = Instance.new("Frame")
+	fill.Size = UDim2.new(0, 0, 1, 0)
+	fill.BackgroundColor3 = Color3.fromRGB(170, 170, 170)
+	fill.BorderSizePixel = 0
+	fill.Parent = bar
+
+	local fillCorner = Instance.new("UICorner")
+	fillCorner.CornerRadius = UDim.new(1, 0)
+	fillCorner.Parent = fill
+
+	local dragging = false
+	local currentValue = initialValue
+
+	local function updateFromMouse(mouseX)
+		local percentage = math.clamp(
+			(mouseX - bar.AbsolutePosition.X) / bar.AbsoluteSize.X,
+			0,
+			1
+		)
+
+		currentValue = minValue + ((maxValue - minValue) * percentage)
+
+		if decimals == 0 then
+			currentValue = math.floor(currentValue + 0.5)
+		else
+			local multiplier = 10 ^ decimals
+			currentValue = math.floor(currentValue * multiplier + 0.5) / multiplier
+		end
+
+		local normalized = (currentValue - minValue) / (maxValue - minValue)
+
+		fill.Size = UDim2.new(normalized, 0, 1, 0)
+
+		if decimals == 0 then
+			label.Text = titleText .. ": " .. tostring(currentValue)
+		else
+			label.Text = titleText .. ": " .. string.format("%." .. decimals .. "f", currentValue)
+		end
+
+		callback(currentValue)
+	end
+
+	local function setInitial()
+		local normalized = (initialValue - minValue) / (maxValue - minValue)
+		fill.Size = UDim2.new(normalized, 0, 1, 0)
+
+		if decimals == 0 then
+			label.Text = titleText .. ": " .. tostring(initialValue)
+		else
+			label.Text = titleText .. ": " .. string.format("%." .. decimals .. "f", initialValue)
+		end
+	end
+
+	bar.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			dragging = true
+			updateFromMouse(input.Position.X)
+		end
+	end)
+
+	UserInputService.InputChanged:Connect(function(input)
+		if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+			updateFromMouse(input.Position.X)
+		end
+	end)
+
+	UserInputService.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 then
+			dragging = false
+		end
+	end)
+
+	setInitial()
+
+	return {
+		GetValue = function()
+			return currentValue
+		end
+	}
+end
+
 createSlider(
-	MainContent,
+	Content,
 	"FOV",
-	120,
+	160,
 	20,
 	180,
 	FOV,
 	function(value)
 		FOV = value
-	end
+	end,
+	0
 )
 
 createSlider(
-	MainContent,
+	Content,
 	"Smoothness",
-	180,
+	220,
 	0.05,
 	1,
 	Smoothness,
 	function(value)
 		Smoothness = value
-	end
+	end,
+	2
 )
 
 createSlider(
-	MainContent,
+	Content,
 	"Walk Speed",
-	240,
+	280,
 	8,
-	100,
+	300,
 	WalkSpeed,
 	function(value)
 		WalkSpeed = value
+	end,
+	0
+)
 
-		local character, humanoid = getLocalCharacter()
-
-		if humanoid then
-			humanoid.WalkSpeed = WalkSpeed
-		end
-	end
+createSlider(
+	Content,
+	"Super Jump",
+	340,
+	20,
+	300,
+	JumpPower,
+	function(value)
+		JumpPower = value
+	end,
+	0
 )
 
 --==================================================
 -- PLAYER DROPDOWN
 --==================================================
 
-local PlayerLabel = makeLabel(
-	MainContent,
-	"Test Player",
-	UDim2.fromOffset(15, 305),
-	UDim2.fromOffset(200, 25),
-	13
+local PlayerLabel = Instance.new("TextLabel")
+PlayerLabel.Size = UDim2.new(1, 0, 0, 20)
+PlayerLabel.Position = UDim2.new(0, 0, 0, 400)
+PlayerLabel.BackgroundTransparency = 1
+PlayerLabel.Text = "Test Player"
+PlayerLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
+PlayerLabel.TextSize = 13
+PlayerLabel.Font = Enum.Font.GothamMedium
+PlayerLabel.TextXAlignment = Enum.TextXAlignment.Left
+PlayerLabel.Parent = Content
+
+local DropdownButton = createButton(
+	Content,
+	"Select Player",
+	UDim2.new(0, 0, 0, 427),
+	UDim2.new(1, 0, 0, 36)
 )
 
-local PlayerDropdown = makeButton(
-	MainContent,
-	"Select Test Player",
-	UDim2.fromOffset(15, 330),
-	UDim2.fromOffset(430, 38)
-)
+local DropdownFrame = Instance.new("ScrollingFrame")
+DropdownFrame.Size = UDim2.new(1, 0, 0, 85)
+DropdownFrame.Position = UDim2.new(0, 0, 0, 468)
+DropdownFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+DropdownFrame.BorderSizePixel = 0
+DropdownFrame.ScrollBarThickness = 5
+DropdownFrame.Visible = false
+DropdownFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+DropdownFrame.Parent = Content
 
-local SelectedPlayer = nil
-local DropdownOpen = false
+local DropdownCorner = Instance.new("UICorner")
+DropdownCorner.CornerRadius = UDim.new(0, 7)
+DropdownCorner.Parent = DropdownFrame
 
-local PlayerListFrame = create("ScrollingFrame", {
-	Name = "PlayerList",
-	Position = UDim2.fromOffset(15, 372),
-	Size = UDim2.fromOffset(430, 0),
-	BackgroundColor3 = Color3.fromRGB(20, 20, 20),
-	BorderSizePixel = 0,
-	ScrollBarThickness = 5,
-	CanvasSize = UDim2.new(),
-	Visible = false,
-	ZIndex = 20
-}, MainContent)
+local DropdownLayout = Instance.new("UIListLayout")
+DropdownLayout.Padding = UDim.new(0, 3)
+DropdownLayout.Parent = DropdownFrame
 
-corner(PlayerListFrame, 7)
-stroke(PlayerListFrame)
+local function updateDropdown()
 
-local PlayerListLayout = create("UIListLayout", {
-	Padding = UDim.new(0, 2),
-	SortOrder = Enum.SortOrder.Name
-}, PlayerListFrame)
-
-local function refreshPlayerDropdown()
-
-	for _, child in ipairs(PlayerListFrame:GetChildren()) do
+	for _, child in ipairs(DropdownFrame:GetChildren()) do
 		if child:IsA("TextButton") then
 			child:Destroy()
 		end
@@ -516,270 +444,176 @@ local function refreshPlayerDropdown()
 
 	local count = 0
 
-	for _, targetPlayer in ipairs(Players:GetPlayers()) do
-
-		if targetPlayer ~= LocalPlayer then
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player ~= LocalPlayer then
 
 			count += 1
 
-			local button = makeButton(
-				PlayerListFrame,
-				targetPlayer.Name,
-				UDim2.new(),
-				UDim2.new(1, -8, 0, 34)
+			local button = createButton(
+				DropdownFrame,
+				player.Name,
+				UDim2.new(0, 3, 0, 0),
+				UDim2.new(1, -8, 0, 30)
 			)
 
-			button.ZIndex = 21
-
-			button.Activated:Connect(function()
-
-				SelectedPlayer = targetPlayer
-				PlayerDropdown.Text = targetPlayer.Name
-
+			button.MouseButton1Click:Connect(function()
+				SelectedPlayer = player
+				DropdownButton.Text = "Selected: " .. player.Name
 				DropdownOpen = false
-				PlayerListFrame.Visible = false
-				PlayerListFrame.Size = UDim2.fromOffset(430, 0)
+				DropdownFrame.Visible = false
 			end)
 		end
 	end
 
-	local height = math.clamp(count * 36, 0, 150)
-
-	PlayerListFrame.CanvasSize = UDim2.fromOffset(0, count * 36)
-	PlayerListFrame.Size = UDim2.fromOffset(430, height)
+	DropdownFrame.CanvasSize = UDim2.new(0, 0, 0, count * 33)
 end
 
-PlayerDropdown.Activated:Connect(function()
-
+DropdownButton.MouseButton1Click:Connect(function()
 	DropdownOpen = not DropdownOpen
-	PlayerListFrame.Visible = DropdownOpen
+	DropdownFrame.Visible = DropdownOpen
+	updateDropdown()
+end)
 
-	if DropdownOpen then
-		refreshPlayerDropdown()
+--==================================================
+-- TELEPORT SELECTED
+--==================================================
+
+local TeleportSelectedButton = createButton(
+	Content,
+	"TELEPORT TO SELECTED",
+	UDim2.new(0, 0, 0, 520),
+	UDim2.new(1, 0, 0, 36)
+)
+
+TeleportSelectedButton.MouseButton1Click:Connect(function()
+
+	if SelectedPlayer and isAlive(SelectedPlayer) then
+
+		local targetRoot = getRoot(SelectedPlayer)
+		local character = LocalPlayer.Character
+
+		if targetRoot and character then
+			local position = targetRoot.Position + Vector3.new(0, 3, -5)
+
+			character:PivotTo(
+				CFrame.lookAt(
+					position,
+					targetRoot.Position
+				)
+			)
+		end
 	end
 end)
 
 --==================================================
--- TELEPORT BUTTON
+-- OPEN TELEPORTER
 --==================================================
 
-local TeleportButton = makeButton(
-	MainContent,
+local OpenTeleporterButton = createButton(
+	Content,
 	"OPEN TELEPORTER",
-	UDim2.fromOffset(15, 430),
-	UDim2.fromOffset(430, 40)
-)
-
---==================================================
--- SETTINGS PANEL
---==================================================
-
-local SettingsPanel = create("Frame", {
-	Name = "SettingsPanel",
-	Position = UDim2.fromOffset(0, 0),
-	Size = UDim2.fromScale(1, 1),
-	BackgroundColor3 = Color3.fromRGB(13, 13, 13),
-	BorderSizePixel = 0,
-	Visible = false,
-	ZIndex = 50
-}, MainFrame)
-
-corner(SettingsPanel, 12)
-stroke(SettingsPanel, Color3.fromRGB(55, 55, 55))
-
-local SettingsTitle = makeLabel(
-	SettingsPanel,
-	"Settings",
-	UDim2.fromOffset(18, 15),
-	UDim2.fromOffset(300, 35),
-	19
-)
-
-SettingsTitle.Font = Enum.Font.GothamBold
-
-local HotkeyLabel = makeLabel(
-	SettingsPanel,
-	"Aim Lock Hotkey",
-	UDim2.fromOffset(18, 75),
-	UDim2.fromOffset(300, 30),
-	14
-)
-
-local HotkeyButton = makeButton(
-	SettingsPanel,
-	"Q",
-	UDim2.fromOffset(18, 110),
-	UDim2.fromOffset(424, 42)
-)
-
-local SettingsInfo = makeLabel(
-	SettingsPanel,
-	"Click the button, then press any keyboard key.",
-	UDim2.fromOffset(18, 160),
-	UDim2.fromOffset(424, 30),
-	12
-)
-
-SettingsInfo.TextColor3 = Color3.fromRGB(150, 150, 150)
-
-local SettingsBack = makeButton(
-	SettingsPanel,
-	"BACK",
-	UDim2.fromOffset(18, 485),
-	UDim2.fromOffset(424, 42)
+	UDim2.new(0, 0, 0, 568),
+	UDim2.new(1, 0, 0, 36)
 )
 
 --==================================================
 -- TELEPORT PANEL
 --==================================================
 
-local TeleportPanel = create("Frame", {
-	Name = "TeleportPanel",
-	Position = UDim2.fromOffset(0, 0),
-	Size = UDim2.fromScale(1, 1),
-	BackgroundColor3 = Color3.fromRGB(13, 13, 13),
-	BorderSizePixel = 0,
-	Visible = false,
-	ZIndex = 50
-}, MainFrame)
+local TeleportPanel = Instance.new("Frame")
+TeleportPanel.Size = UDim2.new(1, 0, 1, 0)
+TeleportPanel.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
+TeleportPanel.Visible = false
+TeleportPanel.Parent = MainFrame
 
-corner(TeleportPanel, 12)
-stroke(TeleportPanel, Color3.fromRGB(55, 55, 55))
-
-local TeleportTitle = makeLabel(
-	TeleportPanel,
-	"Teleport Locations",
-	UDim2.fromOffset(18, 15),
-	UDim2.fromOffset(350, 35),
-	19
-)
-
+local TeleportTitle = Instance.new("TextLabel")
+TeleportTitle.Size = UDim2.new(1, -70, 0, 45)
+TeleportTitle.Position = UDim2.new(0, 15, 0, 0)
+TeleportTitle.BackgroundTransparency = 1
+TeleportTitle.Text = "Teleporter"
+TeleportTitle.TextColor3 = Color3.fromRGB(235, 235, 235)
+TeleportTitle.TextSize = 19
 TeleportTitle.Font = Enum.Font.GothamBold
+TeleportTitle.TextXAlignment = Enum.TextXAlignment.Left
+TeleportTitle.Parent = TeleportPanel
 
-local CurrentPositionLabel = makeLabel(
+local TeleportBack = createButton(
 	TeleportPanel,
-	"Current Position: 0, 0, 0",
-	UDim2.fromOffset(18, 55),
-	UDim2.fromOffset(424, 25),
-	11
+	"BACK",
+	UDim2.new(1, -90, 0, 7),
+	UDim2.new(0, 75, 0, 32)
 )
-
-CurrentPositionLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
 
 --==================================================
 -- COORDINATE BOXES
 --==================================================
 
-local XBox = create("TextBox", {
-	PlaceholderText = "X",
-	Text = "",
-	ClearTextOnFocus = false,
-	BackgroundColor3 = Color3.fromRGB(25, 25, 25),
-	BorderSizePixel = 0,
-	Position = UDim2.fromOffset(18, 90),
-	Size = UDim2.fromOffset(130, 38),
-	TextColor3 = Color3.fromRGB(235, 235, 235),
-	PlaceholderColor3 = Color3.fromRGB(110, 110, 110),
-	TextSize = 13,
-	Font = Enum.Font.GothamMedium
-}, TeleportPanel)
+local function createBox(name, position, placeholder)
 
-corner(XBox, 7)
-stroke(XBox)
+	local box = Instance.new("TextBox")
+	box.Name = name
+	box.Size = UDim2.new(0.31, 0, 0, 38)
+	box.Position = position
+	box.BackgroundColor3 = Color3.fromRGB(28, 28, 28)
+	box.BorderSizePixel = 0
+	box.Text = ""
+	box.PlaceholderText = placeholder
+	box.PlaceholderColor3 = Color3.fromRGB(120, 120, 120)
+	box.TextColor3 = Color3.fromRGB(235, 235, 235)
+	box.TextSize = 14
+	box.Font = Enum.Font.Gotham
+	box.ClearTextOnFocus = false
+	box.Parent = TeleportPanel
 
-local YBox = create("TextBox", {
-	PlaceholderText = "Y",
-	Text = "",
-	ClearTextOnFocus = false,
-	BackgroundColor3 = Color3.fromRGB(25, 25, 25),
-	BorderSizePixel = 0,
-	Position = UDim2.fromOffset(165, 90),
-	Size = UDim2.fromOffset(130, 38),
-	TextColor3 = Color3.fromRGB(235, 235, 235),
-	PlaceholderColor3 = Color3.fromRGB(110, 110, 110),
-	TextSize = 13,
-	Font = Enum.Font.GothamMedium
-}, TeleportPanel)
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 7)
+	corner.Parent = box
 
-corner(YBox, 7)
-stroke(YBox)
+	return box
+end
 
-local ZBox = create("TextBox", {
-	PlaceholderText = "Z",
-	Text = "",
-	ClearTextOnFocus = false,
-	BackgroundColor3 = Color3.fromRGB(25, 25, 25),
-	BorderSizePixel = 0,
-	Position = UDim2.fromOffset(312, 90),
-	Size = UDim2.fromOffset(130, 38),
-	TextColor3 = Color3.fromRGB(235, 235, 235),
-	PlaceholderColor3 = Color3.fromRGB(110, 110, 110),
-	TextSize = 13,
-	Font = Enum.Font.GothamMedium
-}, TeleportPanel)
+local XBox = createBox(
+	"X",
+	UDim2.new(0.02, 0, 0, 65),
+	"X"
+)
 
-corner(ZBox, 7)
-stroke(ZBox)
+local YBox = createBox(
+	"Y",
+	UDim2.new(0.345, 0, 0, 65),
+	"Y"
+)
 
-local CurrentPositionButton = makeButton(
+local ZBox = createBox(
+	"Z",
+	UDim2.new(0.67, 0, 0, 65),
+	"Z"
+)
+
+local CurrentPositionLabel = Instance.new("TextLabel")
+CurrentPositionLabel.Size = UDim2.new(1, -30, 0, 28)
+CurrentPositionLabel.Position = UDim2.new(0, 15, 0, 110)
+CurrentPositionLabel.BackgroundTransparency = 1
+CurrentPositionLabel.Text = "Current: 0, 0, 0"
+CurrentPositionLabel.TextColor3 = Color3.fromRGB(160, 160, 160)
+CurrentPositionLabel.TextSize = 12
+CurrentPositionLabel.Font = Enum.Font.Gotham
+CurrentPositionLabel.TextXAlignment = Enum.TextXAlignment.Left
+CurrentPositionLabel.Parent = TeleportPanel
+
+local UseCurrentButton = createButton(
 	TeleportPanel,
 	"USE CURRENT POSITION",
-	UDim2.fromOffset(18, 140),
-	UDim2.fromOffset(424, 38)
+	UDim2.new(0, 15, 0, 140),
+	UDim2.new(0.48, -15, 0, 36)
 )
 
-local TeleportCoordinatesButton = makeButton(
+local TeleportButton = createButton(
 	TeleportPanel,
 	"TELEPORT",
-	UDim2.fromOffset(18, 185),
-	UDim2.fromOffset(424, 42)
+	UDim2.new(0.52, 0, 0, 140),
+	UDim2.new(0.48, -15, 0, 36)
 )
-
---==================================================
--- TELEPORT FUNCTIONS
---==================================================
-
-local function updateCurrentPosition()
-
-	local character, humanoid, head, root = getLocalCharacter()
-
-	if root then
-
-		local pos = root.Position
-
-		CurrentPositionLabel.Text = string.format(
-			"Current Position: %.1f, %.1f, %.1f",
-			pos.X,
-			pos.Y,
-			pos.Z
-		)
-	end
-end
-
-local function useCurrentPosition()
-
-	local character, humanoid, head, root = getLocalCharacter()
-
-	if root then
-
-		XBox.Text = string.format("%.2f", root.Position.X)
-		YBox.Text = string.format("%.2f", root.Position.Y)
-		ZBox.Text = string.format("%.2f", root.Position.Z)
-	end
-end
-
-local function getCoordinates()
-
-	local x = tonumber(XBox.Text)
-	local y = tonumber(YBox.Text)
-	local z = tonumber(ZBox.Text)
-
-	if not x or not y or not z then
-		return nil
-	end
-
-	return Vector3.new(x, y, z)
-end
 
 local function teleportToCoordinates(position)
 
@@ -789,185 +623,479 @@ local function teleportToCoordinates(position)
 
 	local character = LocalPlayer.Character
 
-	if not character then
-		return
+	if character then
+		character:PivotTo(CFrame.new(position))
 	end
-
-	local root = character:FindFirstChild("HumanoidRootPart")
-
-	if not root then
-		return
-	end
-
-	character:PivotTo(CFrame.new(position))
 end
 
-CurrentPositionButton.Activated:Connect(function()
-	useCurrentPosition()
+UseCurrentButton.MouseButton1Click:Connect(function()
+
+	local root = getRoot(LocalPlayer)
+
+	if root then
+		local position = root.Position
+
+		XBox.Text = string.format("%.1f", position.X)
+		YBox.Text = string.format("%.1f", position.Y)
+		ZBox.Text = string.format("%.1f", position.Z)
+	end
 end)
 
-TeleportCoordinatesButton.Activated:Connect(function()
+TeleportButton.MouseButton1Click:Connect(function()
 
-	local position = getCoordinates()
+	local x = tonumber(XBox.Text)
+	local y = tonumber(YBox.Text)
+	local z = tonumber(ZBox.Text)
 
-	if position then
-		teleportToCoordinates(position)
+	if x and y and z then
+		teleportToCoordinates(Vector3.new(x, y, z))
 	end
 end)
 
 --==================================================
--- TELEPORT SAVE SLOTS
+-- PRESETS
 --==================================================
 
-local SlotsLabel = makeLabel(
-	TeleportPanel,
-	"Saved Locations",
-	UDim2.fromOffset(18, 242),
-	UDim2.fromOffset(250, 25),
-	14
-)
+local PresetTitle = Instance.new("TextLabel")
+PresetTitle.Size = UDim2.new(1, -30, 0, 25)
+PresetTitle.Position = UDim2.new(0, 15, 0, 190)
+PresetTitle.BackgroundTransparency = 1
+PresetTitle.Text = "PRESETS"
+PresetTitle.TextColor3 = Color3.fromRGB(220, 220, 220)
+PresetTitle.TextSize = 13
+PresetTitle.Font = Enum.Font.GothamBold
+PresetTitle.TextXAlignment = Enum.TextXAlignment.Left
+PresetTitle.Parent = TeleportPanel
 
-local SlotsFrame = create("ScrollingFrame", {
-	Position = UDim2.fromOffset(18, 272),
-	Size = UDim2.fromOffset(424, 175),
-	BackgroundTransparency = 1,
-	BorderSizePixel = 0,
-	ScrollBarThickness = 5,
-	CanvasSize = UDim2.fromOffset(0, 0)
-}, TeleportPanel)
+local PresetContainer = Instance.new("Frame")
+PresetContainer.Size = UDim2.new(1, -30, 0, 120)
+PresetContainer.Position = UDim2.new(0, 15, 0, 218)
+PresetContainer.BackgroundTransparency = 1
+PresetContainer.Parent = TeleportPanel
 
-local SlotsLayout = create("UIListLayout", {
-	Padding = UDim.new(0, 5),
-	SortOrder = Enum.SortOrder.LayoutOrder
-}, SlotsFrame)
+local PresetGrid = Instance.new("UIGridLayout")
+PresetGrid.CellSize = UDim2.new(0.32, 0, 0, 48)
+PresetGrid.CellPadding = UDim2.new(0.02, 0, 0, 8)
+PresetGrid.Parent = PresetContainer
 
-local function updateSlotButton(slotNumber, button)
+for _, preset in ipairs(TeleportPresets) do
 
-	local data = TeleportSlots[slotNumber]
-
-	if data then
-
-		button.Text = string.format(
-			"Slot %d  |  %.1f, %.1f, %.1f",
-			slotNumber,
-			data.X,
-			data.Y,
-			data.Z
-		)
-
-	else
-
-		button.Text = "Slot " .. slotNumber .. "  |  EMPTY"
-	end
-end
-
-for slotNumber = 1, 10 do
-
-	local row = create("Frame", {
-		BackgroundTransparency = 1,
-		Size = UDim2.new(1, -5, 0, 35),
-		LayoutOrder = slotNumber
-	}, SlotsFrame)
-
-	local slotButton = makeButton(
-		row,
-		"Slot " .. slotNumber .. " | EMPTY",
-		UDim2.fromOffset(0, 0),
-		UDim2.new(1, -82, 1, 0)
+	local button = createButton(
+		PresetContainer,
+		preset.Name,
+		UDim2.new(),
+		UDim2.new()
 	)
 
-	local saveButton = makeButton(
-		row,
-		"SAVE",
-		UDim2.new(1, -75, 0, 0),
-		UDim2.fromOffset(75, 35)
-	)
-
-	slotButton.Activated:Connect(function()
-
-		local data = TeleportSlots[slotNumber]
-
-		if data then
-
-			XBox.Text = tostring(data.X)
-			YBox.Text = tostring(data.Y)
-			ZBox.Text = tostring(data.Z)
-		end
+	button.MouseButton1Click:Connect(function()
+		teleportToCoordinates(preset.Position)
 	end)
+end
 
-	saveButton.Activated:Connect(function()
+--==================================================
+-- SAVED SLOTS
+--==================================================
 
-		local position = getCoordinates()
+local SlotTitle = Instance.new("TextLabel")
+SlotTitle.Size = UDim2.new(1, -30, 0, 25)
+SlotTitle.Position = UDim2.new(0, 15, 0, 350)
+SlotTitle.BackgroundTransparency = 1
+SlotTitle.Text = "SAVED SLOTS"
+SlotTitle.TextColor3 = Color3.fromRGB(220, 220, 220)
+SlotTitle.TextSize = 13
+SlotTitle.Font = Enum.Font.GothamBold
+SlotTitle.TextXAlignment = Enum.TextXAlignment.Left
+SlotTitle.Parent = TeleportPanel
+
+local SlotsFrame = Instance.new("ScrollingFrame")
+SlotsFrame.Size = UDim2.new(1, -30, 0, 220)
+SlotsFrame.Position = UDim2.new(0, 15, 0, 378)
+SlotsFrame.BackgroundColor3 = Color3.fromRGB(24, 24, 24)
+SlotsFrame.BorderSizePixel = 0
+SlotsFrame.ScrollBarThickness = 5
+SlotsFrame.CanvasSize = UDim2.new(0, 0, 0, 10 * 45)
+SlotsFrame.Parent = TeleportPanel
+
+local SlotsCorner = Instance.new("UICorner")
+SlotsCorner.CornerRadius = UDim.new(0, 7)
+SlotsCorner.Parent = SlotsFrame
+
+local SlotsLayout = Instance.new("UIListLayout")
+SlotsLayout.Padding = UDim.new(0, 4)
+SlotsLayout.Parent = SlotsFrame
+
+local function updateSlots()
+
+	for _, child in ipairs(SlotsFrame:GetChildren()) do
+		if child:IsA("TextButton") then
+			child:Destroy()
+		end
+	end
+
+	for i = 1, 10 do
+
+		local position = TeleportSlots[i]
+
+		local text
 
 		if position then
+			text = string.format(
+				"Slot %d  |  %.1f, %.1f, %.1f",
+				i,
+				position.X,
+				position.Y,
+				position.Z
+			)
+		else
+			text = "Slot " .. i .. "  |  EMPTY"
+		end
 
-			TeleportSlots[slotNumber] = position
-			updateSlotButton(slotNumber, slotButton)
+		local button = createButton(
+			SlotsFrame,
+			text,
+			UDim2.new(0, 3, 0, 0),
+			UDim2.new(1, -8, 0, 40)
+		)
+
+		button.MouseButton1Click:Connect(function()
+
+			if TeleportSlots[i] then
+
+				local position = TeleportSlots[i]
+
+				XBox.Text = string.format("%.1f", position.X)
+				YBox.Text = string.format("%.1f", position.Y)
+				ZBox.Text = string.format("%.1f", position.Z)
+
+				teleportToCoordinates(position)
+			end
+		end)
+	end
+end
+
+updateSlots()
+
+local SaveSlotButton = createButton(
+	TeleportPanel,
+	"SAVE CURRENT TO SLOT",
+	UDim2.new(0, 15, 1, -45),
+	UDim2.new(1, -30, 0, 35)
+)
+
+SaveSlotButton.MouseButton1Click:Connect(function()
+
+	local x = tonumber(XBox.Text)
+	local y = tonumber(YBox.Text)
+	local z = tonumber(ZBox.Text)
+
+	if x and y and z then
+
+		local nextSlot = nil
+
+		for i = 1, 10 do
+			if not TeleportSlots[i] then
+				nextSlot = i
+				break
+			end
+		end
+
+		if not nextSlot then
+			nextSlot = 1
+		end
+
+		TeleportSlots[nextSlot] = Vector3.new(x, y, z)
+
+		updateSlots()
+	end
+end)
+
+OpenTeleporterButton.MouseButton1Click:Connect(function()
+	TeleportOpen = true
+	TeleportPanel.Visible = true
+end)
+
+TeleportBack.MouseButton1Click:Connect(function()
+	TeleportOpen = false
+	TeleportPanel.Visible = false
+end)
+
+--==================================================
+-- SETTINGS PANEL
+--==================================================
+
+local SettingsPanel = Instance.new("Frame")
+SettingsPanel.Size = UDim2.new(1, 0, 1, 0)
+SettingsPanel.BackgroundColor3 = Color3.fromRGB(18, 18, 18)
+SettingsPanel.Visible = false
+SettingsPanel.Parent = MainFrame
+
+local SettingsTitle = Instance.new("TextLabel")
+SettingsTitle.Size = UDim2.new(1, -100, 0, 45)
+SettingsTitle.Position = UDim2.new(0, 15, 0, 0)
+SettingsTitle.BackgroundTransparency = 1
+SettingsTitle.Text = "Settings"
+SettingsTitle.TextColor3 = Color3.fromRGB(235, 235, 235)
+SettingsTitle.TextSize = 19
+SettingsTitle.Font = Enum.Font.GothamBold
+SettingsTitle.TextXAlignment = Enum.TextXAlignment.Left
+SettingsTitle.Parent = SettingsPanel
+
+local SettingsBack = createButton(
+	SettingsPanel,
+	"BACK",
+	UDim2.new(1, -90, 0, 7),
+	UDim2.new(0, 75, 0, 32)
+)
+
+local AimKeyButton = createButton(
+	SettingsPanel,
+	"Aim Lock Key: Q",
+	UDim2.new(0, 15, 0, 70),
+	UDim2.new(1, -30, 0, 42)
+)
+
+local MenuKeyButton = createButton(
+	SettingsPanel,
+	"Menu Toggle Key: Z",
+	UDim2.new(0, 15, 0, 122),
+	UDim2.new(1, -30, 0, 42)
+)
+
+local KeyInfo = Instance.new("TextLabel")
+KeyInfo.Size = UDim2.new(1, -30, 0, 80)
+KeyInfo.Position = UDim2.new(0, 15, 0, 180)
+KeyInfo.BackgroundTransparency = 1
+KeyInfo.Text = "Click a key button, then press the key you want to use."
+KeyInfo.TextColor3 = Color3.fromRGB(150, 150, 150)
+KeyInfo.TextSize = 13
+KeyInfo.Font = Enum.Font.Gotham
+KeyInfo.TextWrapped = true
+KeyInfo.TextXAlignment = Enum.TextXAlignment.Left
+KeyInfo.Parent = SettingsPanel
+
+local function updateKeyButtons()
+
+	AimKeyButton.Text = "Aim Lock Key: " .. ToggleKey.Name
+	MenuKeyButton.Text = "Menu Toggle Key: " .. MenuKey.Name
+
+end
+
+updateKeyButtons()
+
+AimKeyButton.MouseButton1Click:Connect(function()
+	WaitingForKey = "Aim"
+	AimKeyButton.Text = "Press a key..."
+end)
+
+MenuKeyButton.MouseButton1Click:Connect(function()
+	WaitingForKey = "Menu"
+	MenuKeyButton.Text = "Press a key..."
+end)
+
+SettingsButton.MouseButton1Click:Connect(function()
+
+	if TeleportOpen then
+		return
+	end
+
+	SettingsOpen = true
+	SettingsPanel.Visible = true
+end)
+
+SettingsBack.MouseButton1Click:Connect(function()
+	SettingsOpen = false
+	SettingsPanel.Visible = false
+end)
+
+--==================================================
+-- MAIN BUTTONS
+--==================================================
+
+local function updateAimButton()
+
+	if AimLockEnabled then
+		AimButton.Text = "AIM LOCK: ON"
+	else
+		AimButton.Text = "AIM LOCK: OFF"
+	end
+
+	if CurrentTarget and isAlive(CurrentTarget) then
+		LockedLabel.Text = "Locked Onto: " .. CurrentTarget.Name
+	else
+		LockedLabel.Text = "Locked Onto: None"
+	end
+end
+
+AimButton.MouseButton1Click:Connect(function()
+
+	AimLockEnabled = not AimLockEnabled
+
+	if not AimLockEnabled then
+		CurrentTarget = nil
+	end
+
+	updateAimButton()
+end)
+
+ESPButton.MouseButton1Click:Connect(function()
+
+	ESPEnabled = not ESPEnabled
+
+	if ESPEnabled then
+		ESPButton.Text = "ESP: ON"
+	else
+		ESPButton.Text = "ESP: OFF"
+	end
+end)
+
+
+--==================================================
+-- ESP
+--==================================================
+
+local function removeESP(player)
+
+	local object = ESPObjects[player]
+
+	if object then
+		object:Destroy()
+		ESPObjects[player] = nil
+	end
+end
+
+local function removeAllESP()
+
+	for player, object in pairs(ESPObjects) do
+
+		if object then
+			object:Destroy()
+		end
+
+		ESPObjects[player] = nil
+	end
+end
+
+local function createESP(player)
+
+	if player == LocalPlayer then
+		return
+	end
+
+	removeESP(player)
+
+	local head = getHead(player)
+
+	if not head then
+		return
+	end
+
+	local billboard = Instance.new("BillboardGui")
+	billboard.Name = "CamESP"
+	billboard.Adornee = head
+	billboard.Size = UDim2.new(0, 200, 0, 55)
+	billboard.StudsOffset = Vector3.new(0, 3, 0)
+	billboard.AlwaysOnTop = true
+	billboard.Parent = head
+
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.new(1, 0, 1, 0)
+	label.BackgroundTransparency = 1
+	label.TextColor3 = Color3.fromRGB(255, 255, 255)
+	label.TextStrokeTransparency = 0.3
+	label.TextSize = 12
+	label.Font = Enum.Font.GothamBold
+	label.TextWrapped = true
+	label.Parent = billboard
+
+	ESPObjects[player] = billboard
+
+	local connection
+
+	connection = RunService.RenderStepped:Connect(function()
+
+		if not ESPEnabled
+			or not player.Parent
+			or not billboard.Parent
+			or not isAlive(player) then
+
+			if connection then
+				connection:Disconnect()
+			end
+
+			return
+		end
+
+		local root = getRoot(player)
+
+		if root then
+
+			local pos = root.Position
+
+			label.Text = string.format(
+				"%s\nUserId: %s\nXYZ: %.1f, %.1f, %.1f",
+				player.Name,
+				tostring(player.UserId),
+				pos.X,
+				pos.Y,
+				pos.Z
+			)
 		end
 	end)
 end
 
-SlotsFrame.CanvasSize = UDim2.fromOffset(0, 400)
+local function refreshESP()
 
-local TeleportBack = makeButton(
-	TeleportPanel,
-	"BACK",
-	UDim2.fromOffset(18, 485),
-	UDim2.fromOffset(424, 42)
-)
+	removeAllESP()
 
---==================================================
--- PANEL SWITCHING
---==================================================
+	if not ESPEnabled then
+		return
+	end
 
-local function openSettings()
+	for _, player in ipairs(Players:GetPlayers()) do
 
-	SettingsOpen = true
-	TeleportOpen = false
-
-	MainContent.Visible = false
-	SettingsPanel.Visible = true
-	TeleportPanel.Visible = false
+		if player ~= LocalPlayer then
+			createESP(player)
+		end
+	end
 end
 
-local function openTeleporter()
+ESPButton.MouseButton1Click:Connect(function()
 
-	TeleportOpen = true
-	SettingsOpen = false
+	if ESPEnabled then
+		refreshESP()
+	else
+		removeAllESP()
+	end
+end)
 
-	MainContent.Visible = false
-	SettingsPanel.Visible = false
-	TeleportPanel.Visible = true
+Players.PlayerAdded:Connect(function(player)
 
-	updateCurrentPosition()
-end
+	player.CharacterAdded:Connect(function()
 
-local function closePanels()
+		task.wait(0.5)
 
-	SettingsOpen = false
-	TeleportOpen = false
+		if ESPEnabled then
+			createESP(player)
+		end
+	end)
 
-	MainContent.Visible = true
-	SettingsPanel.Visible = false
-	TeleportPanel.Visible = false
-end
+	updateDropdown()
+end)
 
-SettingsButton.Activated:Connect(openSettings)
+Players.PlayerRemoving:Connect(function(player)
 
-SettingsBack.Activated:Connect(closePanels)
+	removeESP(player)
 
-TeleportButton.Activated:Connect(openTeleporter)
+	if CurrentTarget == player then
+		CurrentTarget = nil
+	end
 
-TeleportBack.Activated:Connect(closePanels)
+	if SelectedPlayer == player then
+		SelectedPlayer = nil
+		DropdownButton.Text = "Select Player"
+	end
 
---==================================================
--- HOTKEY SETTINGS
---==================================================
-
-HotkeyButton.Activated:Connect(function()
-
-	WaitingForKey = true
-	HotkeyButton.Text = "PRESS A KEY..."
+	updateDropdown()
 end)
 
 --==================================================
@@ -983,54 +1111,41 @@ local function getClosestTarget()
 	end
 
 	local mousePosition = UserInputService:GetMouseLocation()
-
 	local viewportSize = camera.ViewportSize
-	local screenCenter = Vector2.new(
-		viewportSize.X / 2,
-		viewportSize.Y / 2
-	)
 
-	local fovPixels = math.tan(math.rad(FOV / 2))
-	local referenceDistance = math.max(viewportSize.X, viewportSize.Y)
-
-	local radius = math.clamp(
-		fovPixels * referenceDistance * 0.45,
-		40,
-		500
-	)
+	local fovRadius =
+		math.min(viewportSize.X, viewportSize.Y)
+		* (FOV / 180)
 
 	local closestPlayer = nil
 	local closestDistance = math.huge
 
-	for _, targetPlayer in ipairs(Players:GetPlayers()) do
+	for _, player in ipairs(Players:GetPlayers()) do
 
-		if targetPlayer ~= LocalPlayer then
+		if player ~= LocalPlayer and isAlive(player) then
 
-			local character, humanoid, head = getCharacter(targetPlayer)
+			local head = getHead(player)
 
-			if character and humanoid and head then
+			if head then
 
-				local screenPosition, onScreen =
+				local screenPosition, visible =
 					camera:WorldToViewportPoint(head.Position)
 
-				if onScreen and screenPosition.Z > 0 then
+				if visible and screenPosition.Z > 0 then
 
-					local targetScreenPosition = Vector2.new(
-						screenPosition.X,
-						screenPosition.Y
-					)
+					local distance =
+						(
+							Vector2.new(
+								screenPosition.X,
+								screenPosition.Y
+							) - mousePosition
+						).Magnitude
 
-					local distanceFromMouse =
-						(targetScreenPosition - mousePosition).Magnitude
+					if distance <= fovRadius
+						and distance < closestDistance then
 
-					local distanceFromCenter =
-						(targetScreenPosition - screenCenter).Magnitude
-
-					if distanceFromCenter <= radius
-						and distanceFromMouse < closestDistance then
-
-						closestDistance = distanceFromMouse
-						closestPlayer = targetPlayer
+						closestDistance = distance
+						closestPlayer = player
 					end
 				end
 			end
@@ -1040,466 +1155,140 @@ local function getClosestTarget()
 	return closestPlayer
 end
 
-local function isValidTarget(target)
+local function isValidTarget(player)
 
-	if not target then
+	if not player then
 		return false
 	end
 
-	local character, humanoid, head, root = getCharacter(target)
-
-	return character ~= nil
-		and humanoid ~= nil
-		and head ~= nil
-		and root ~= nil
-end
-
-local function setTarget(target)
-
-	CurrentTarget = target
-
-	if target then
-		LockedLabel.Text = "Locked Onto: " .. target.Name
-	else
-		LockedLabel.Text = "Locked Onto: None"
+	if player == LocalPlayer then
+		return false
 	end
+
+	return isAlive(player)
 end
 
-local function acquireTarget()
+local function findBetterTarget()
 
-	local target = getClosestTarget()
+	local candidate = getClosestTarget()
 
-	if target then
-		setTarget(target)
+	if not candidate then
+		return CurrentTarget
 	end
-end
 
-local function toggleAimLock()
-
-	AimLockEnabled = not AimLockEnabled
-
-	updateAimButton()
-
-	if AimLockEnabled then
-
-		acquireTarget()
-
-	else
-
-		setTarget(nil)
-	end
-end
-
-AimButton.Activated:Connect(toggleAimLock)
-
---==================================================
--- TARGET SWITCHING
---==================================================
-
-local function checkForTargetSwitch()
-
-	if not AimLockEnabled then
-		return
+	if not CurrentTarget or not isValidTarget(CurrentTarget) then
+		return candidate
 	end
 
 	local camera = workspace.CurrentCamera
 
 	if not camera then
-		return
+		return CurrentTarget
 	end
 
 	local mousePosition = UserInputService:GetMouseLocation()
 
-	local bestTarget = nil
-	local bestDistance = math.huge
+	local currentHead = getHead(CurrentTarget)
+	local candidateHead = getHead(candidate)
 
-	for _, targetPlayer in ipairs(Players:GetPlayers()) do
-
-		if targetPlayer ~= LocalPlayer then
-
-			local character, humanoid, head =
-				getCharacter(targetPlayer)
-
-			if character and humanoid and head then
-
-				local screenPosition, onScreen =
-					camera:WorldToViewportPoint(head.Position)
-
-				if onScreen and screenPosition.Z > 0 then
-
-					local targetPosition = Vector2.new(
-						screenPosition.X,
-						screenPosition.Y
-					)
-
-					local distance =
-						(targetPosition - mousePosition).Magnitude
-
-					if distance < bestDistance then
-
-						bestDistance = distance
-						bestTarget = targetPlayer
-					end
-				end
-			end
-		end
+	if not currentHead or not candidateHead then
+		return CurrentTarget
 	end
 
-	if bestTarget and bestTarget ~= CurrentTarget then
+	local currentScreen, currentVisible =
+		camera:WorldToViewportPoint(currentHead.Position)
 
-		local currentDistance = math.huge
+	local candidateScreen, candidateVisible =
+		camera:WorldToViewportPoint(candidateHead.Position)
 
-		if isValidTarget(CurrentTarget) then
-
-			local _, _, currentHead =
-				getCharacter(CurrentTarget)
-
-			local screenPosition, onScreen =
-				camera:WorldToViewportPoint(currentHead.Position)
-
-			if onScreen and screenPosition.Z > 0 then
-
-				currentDistance = (
-					Vector2.new(
-						screenPosition.X,
-						screenPosition.Y
-					) - mousePosition
-				).Magnitude
-			end
-		end
-
-		-- Require the new target to be meaningfully closer.
-		if bestDistance + 25 < currentDistance then
-			setTarget(bestTarget)
-		end
+	if not currentVisible or not candidateVisible then
+		return CurrentTarget
 	end
+
+	local currentDistance =
+		(
+			Vector2.new(
+				currentScreen.X,
+				currentScreen.Y
+			) - mousePosition
+		).Magnitude
+
+	local candidateDistance =
+		(
+			Vector2.new(
+				candidateScreen.X,
+				candidateScreen.Y
+			) - mousePosition
+		).Magnitude
+
+	if candidateDistance + 25 < currentDistance then
+		return candidate
+	end
+
+	return CurrentTarget
 end
 
 --==================================================
--- ESP
+-- MOVEMENT
 --==================================================
 
-local function removeESP(targetPlayer)
+local function applyMovementSettings()
 
-	local gui = ESPObjects[targetPlayer]
+	local humanoid = getHumanoid(LocalPlayer)
 
-	if gui then
-		gui:Destroy()
-		ESPObjects[targetPlayer] = nil
-	end
-end
-
-local function createESP(targetPlayer)
-
-	if targetPlayer == LocalPlayer then
+	if not humanoid then
 		return
 	end
 
-	removeESP(targetPlayer)
+	humanoid.WalkSpeed = WalkSpeed
+	humanoid.UseJumpPower = true
+	humanoid.JumpPower = JumpPower
 
-	local character = targetPlayer.Character
-
-	if not character then
-		return
-	end
-
-	local head = character:FindFirstChild("Head")
-
-	if not head then
-		return
-	end
-
-	local billboard = Instance.new("BillboardGui")
-
-	billboard.Name = "CamAimESP"
-	billboard.Adornee = head
-	billboard.AlwaysOnTop = true
-	billboard.MaxDistance = 10000
-	billboard.Size = UDim2.fromOffset(240, 70)
-	billboard.StudsOffset = Vector3.new(0, 3, 0)
-	billboard.Parent = head
-
-	local label = Instance.new("TextLabel")
-
-	label.Name = "Info"
-	label.BackgroundTransparency = 1
-	label.Size = UDim2.fromScale(1, 1)
-	label.TextColor3 = Color3.fromRGB(255, 255, 255)
-	label.TextStrokeTransparency = 0.3
-	label.TextSize = 12
-	label.Font = Enum.Font.GothamBold
-	label.TextWrapped = true
-	label.Parent = billboard
-
-	ESPObjects[targetPlayer] = billboard
-
-	task.spawn(function()
-
-		while billboard.Parent and ESPObjects[targetPlayer] == billboard do
-
-			local character2, humanoid2, head2, root2 =
-				getCharacter(targetPlayer)
-
-			if root2 then
-
-				local p = root2.Position
-
-				label.Text = string.format(
-					"%s\nUserId: %d\nXYZ: %.1f, %.1f, %.1f",
-					targetPlayer.Name,
-					targetPlayer.UserId,
-					p.X,
-					p.Y,
-					p.Z
-				)
-
-			else
-
-				label.Text = targetPlayer.Name
-			end
-
-			task.wait(0.05)
-		end
-	end)
 end
 
-local function refreshESP()
-
-	for _, targetPlayer in ipairs(Players:GetPlayers()) do
-
-		if targetPlayer ~= LocalPlayer then
-
-			if ESPEnabled then
-				createESP(targetPlayer)
-			else
-				removeESP(targetPlayer)
-			end
-		end
-	end
-end
-
-ESPButton.Activated:Connect(function()
-
-	ESPEnabled = not ESPEnabled
-
-	if ESPEnabled then
-		ESPButton.Text = "ESP: ON"
-	else
-		ESPButton.Text = "ESP: OFF"
-	end
-
-	refreshESP()
-end)
-
---==================================================
--- PLAYER EVENTS
---==================================================
-
-Players.PlayerAdded:Connect(function(targetPlayer)
-
-	targetPlayer.CharacterAdded:Connect(function()
-		task.wait(0.5)
-
-		if ESPEnabled then
-			createESP(targetPlayer)
-		end
-
-		refreshPlayerDropdown()
-	end)
-
-	refreshPlayerDropdown()
-end)
-
-Players.PlayerRemoving:Connect(function(targetPlayer)
-
-	removeESP(targetPlayer)
-
-	if CurrentTarget == targetPlayer then
-		setTarget(nil)
-	end
-
-	if SelectedPlayer == targetPlayer then
-		SelectedPlayer = nil
-		PlayerDropdown.Text = "Select Test Player"
-	end
-
-	task.defer(refreshPlayerDropdown)
-end)
-
-for _, targetPlayer in ipairs(Players:GetPlayers()) do
-
-	if targetPlayer ~= LocalPlayer then
-
-		targetPlayer.CharacterAdded:Connect(function()
-
-			task.wait(0.5)
-
-			if ESPEnabled then
-				createESP(targetPlayer)
-			end
-		end)
-	end
-end
-
---==================================================
--- CHARACTER RESPAWN
---==================================================
-
-LocalPlayer.CharacterAdded:Connect(function(character)
-
-	local humanoid = character:WaitForChild("Humanoid", 10)
-
-	if humanoid then
-		humanoid.WalkSpeed = WalkSpeed
-	end
-
-	setTarget(nil)
+LocalPlayer.CharacterAdded:Connect(function()
 
 	task.wait(0.5)
 
-	updateCurrentPosition()
+	applyMovementSettings()
 end)
 
 --==================================================
--- INPUT
+-- MAIN LOOP
 --==================================================
 
-UserInputService.InputBegan:Connect(function(input, gameProcessed)
+local positionTimer = 0
 
-	if gameProcessed then
-		return
-	end
+RunService.RenderStepped:Connect(function(deltaTime)
 
-	-- Changing aim hotkey
-	if WaitingForKey then
+	applyMovementSettings()
 
-		if input.UserInputType == Enum.UserInputType.Keyboard then
+	-- UPDATE ESP POSITION/TEXT
+	-- ESP objects themselves update through their own connections.
 
-			ToggleKey = input.KeyCode
-			WaitingForKey = false
-
-			HotkeyButton.Text = ToggleKey.Name
-		end
-
-		return
-	end
-
-	-- Aim lock hotkey
-	if input.KeyCode == ToggleKey then
-
-		toggleAimLock()
-		return
-	end
-
-	-- Hide/show menu
-	if input.KeyCode == MenuKey then
-
-		MenuVisible = not MenuVisible
-		MainFrame.Visible = MenuVisible
-
-		-- Hide every panel when menu is hidden
-		if not MenuVisible then
-			DropdownOpen = false
-			PlayerListFrame.Visible = false
-		end
-	end
-end)
-
---==================================================
--- SELECTED PLAYER TELEPORT
---==================================================
-
-local function teleportToSelectedPlayer()
-
-	if not SelectedPlayer then
-		return
-	end
-
-	local character = SelectedPlayer.Character
-
-	if not character then
-		return
-	end
-
-	local root = character:FindFirstChild("HumanoidRootPart")
-
-	if not root then
-		return
-	end
-
-	local localCharacter = LocalPlayer.Character
-
-	if not localCharacter then
-		return
-	end
-
-	-- Slightly above/behind the test player.
-	local destination =
-		root.Position + Vector3.new(0, 3, -5)
-
-	localCharacter:PivotTo(
-		CFrame.new(destination, root.Position)
-	)
-end
-
-local SelectedTeleportButton = makeButton(
-	MainContent,
-	"TELEPORT TO SELECTED PLAYER",
-	UDim2.fromOffset(15, 478),
-	UDim2.fromOffset(430, 40)
-)
-
-SelectedTeleportButton.Activated:Connect(teleportToSelectedPlayer)
-
---==================================================
--- RENDER LOOP
---==================================================
-
-RunService.RenderStepped:Connect(function()
-
-	local camera = workspace.CurrentCamera
-
-	if not camera then
-		return
-	end
-
-	-- Camera FOV
-	camera.FieldOfView = FOV
-
-	-- Keep WalkSpeed active
-	local localCharacter = LocalPlayer.Character
-
-	if localCharacter then
-
-		local humanoid =
-			localCharacter:FindFirstChildOfClass("Humanoid")
-
-		if humanoid and humanoid.Health > 0 then
-			humanoid.WalkSpeed = WalkSpeed
-		end
-	end
-
-	-- Aim lock
+	-- AIM LOCK
 	if AimLockEnabled then
 
 		if not isValidTarget(CurrentTarget) then
+			CurrentTarget = getClosestTarget()
+		end
 
-			acquireTarget()
+		if CurrentTarget then
+			CurrentTarget = findBetterTarget()
+		end
 
-		else
+		if isValidTarget(CurrentTarget) then
 
-			checkForTargetSwitch()
+			local camera = workspace.CurrentCamera
+			local head = getHead(CurrentTarget)
 
-			local character, humanoid, head, root =
-				getCharacter(CurrentTarget)
+			if camera and head then
 
-			if head then
+				local cameraPosition = camera.CFrame.Position
 
-				-- Look directly at the target.
-				-- Higher smoothness = faster tracking.
 				local desiredCFrame =
 					CFrame.lookAt(
-						camera.CFrame.Position,
+						cameraPosition,
 						head.Position
 					)
 
@@ -1518,60 +1307,167 @@ RunService.RenderStepped:Connect(function()
 			end
 		end
 	end
+
+	-- UPDATE LOCKED LABEL
+	if CurrentTarget and isValidTarget(CurrentTarget) then
+		LockedLabel.Text = "Locked Onto: " .. CurrentTarget.Name
+	else
+		LockedLabel.Text = "Locked Onto: None"
+	end
+
+	-- CURRENT POSITION
+	positionTimer += deltaTime
+
+	if positionTimer >= 0.1 then
+
+		positionTimer = 0
+
+		local root = getRoot(LocalPlayer)
+
+		if root then
+
+			local pos = root.Position
+
+			CurrentPositionLabel.Text =
+				string.format(
+					"Current: %.1f, %.1f, %.1f",
+					pos.X,
+					pos.Y,
+					pos.Z
+				)
+		end
+	end
 end)
 
 --==================================================
--- POSITION UPDATE
+-- INPUT
 --==================================================
 
-task.spawn(function()
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
 
-	while ScreenGui.Parent do
+	if gameProcessed then
+		return
+	end
 
-		if TeleportOpen then
-			updateCurrentPosition()
+	-- KEY CONFIGURATION
+	if WaitingForKey then
+
+		if input.UserInputType == Enum.UserInputType.Keyboard then
+
+			if WaitingForKey == "Aim" then
+				ToggleKey = input.KeyCode
+			elseif WaitingForKey == "Menu" then
+				MenuKey = input.KeyCode
+			end
+
+			WaitingForKey = false
+
+			updateKeyButtons()
 		end
 
-		task.wait(0.1)
+		return
 	end
+
+	-- AIM KEY
+	if input.KeyCode == ToggleKey then
+
+		AimLockEnabled = not AimLockEnabled
+
+		if not AimLockEnabled then
+			CurrentTarget = nil
+		end
+
+		updateAimButton()
+	end
+
+	-- MENU KEY
+	if input.KeyCode == MenuKey then
+
+		MenuVisible = not MenuVisible
+
+		MainFrame.Visible = MenuVisible
+
+		if not MenuVisible then
+			SettingsPanel.Visible = false
+			TeleportPanel.Visible = false
+			SettingsOpen = false
+			TeleportOpen = false
+		end
+	end
+end)
+
+--==================================================
+-- DRAGGING
+--==================================================
+
+local dragging = false
+local dragStart
+local startPosition
+
+TitleBar.InputBegan:Connect(function(input)
+
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+
+		dragging = true
+		dragStart = input.Position
+		startPosition = MainFrame.Position
+	end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+
+	if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+
+		local delta = input.Position - dragStart
+
+		MainFrame.Position =
+			UDim2.new(
+				startPosition.X.Scale,
+				startPosition.X.Offset + delta.X,
+				startPosition.Y.Scale,
+				startPosition.Y.Offset + delta.Y
+			)
+	end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		dragging = false
+	end
+end)
+
+--==================================================
+-- HIDE BUTTON
+--==================================================
+
+HideButton.MouseButton1Click:Connect(function()
+
+	MenuVisible = false
+	MainFrame.Visible = false
+
+	SettingsPanel.Visible = false
+	TeleportPanel.Visible = false
+
+	SettingsOpen = false
+	TeleportOpen = false
 end)
 
 --==================================================
 -- INITIALIZE
 --==================================================
 
-local function initialize()
+updateAimButton()
+updateDropdown()
+refreshESP()
 
-	local camera = workspace.CurrentCamera
-
-	if camera then
-		camera.FieldOfView = FOV
-	end
-
-	local character = LocalPlayer.Character
-
-	if character then
-
-		local humanoid =
-			character:FindFirstChildOfClass("Humanoid")
-
-		if humanoid then
-			humanoid.WalkSpeed = WalkSpeed
-		end
-	end
-
-	refreshPlayerDropdown()
-	refreshESP()
-	updateAimButton()
-
-	print("====================================")
-	print("[CAM AIM TEST MENU] Loaded successfully")
-	print("[CAM AIM TEST MENU] Aim Key:", ToggleKey.Name)
-	print("[CAM AIM TEST MENU] Menu Key:", MenuKey.Name)
-	print("[CAM AIM TEST MENU] ESP:", ESPEnabled)
-	print("[CAM AIM TEST MENU] Hitboxes: REMOVED")
-	print("[CAM AIM TEST MENU] Teleport Slots: 1-10")
-	print("====================================")
-end
-
-initialize()
+print("================================")
+print("CAM AIM TEST MENU LOADED")
+print("Aim Lock Key:", ToggleKey.Name)
+print("Menu Key:", MenuKey.Name)
+print("ESP: ON")
+print("FOV:", FOV)
+print("Walk Speed:", WalkSpeed)
+print("Super Jump:", JumpPower)
+print("Teleport presets loaded:", #TeleportPresets)
+print("================================")
